@@ -1,6 +1,9 @@
 using UnityEngine;
 using TMPro;
 using TLab.InputField;
+using UnityEngine.SceneManagement;
+using Newtonsoft.Json;
+using System.IO;
 
 namespace TLab.Android.WebView
 {
@@ -13,6 +16,26 @@ namespace TLab.Android.WebView
         [SerializeField] private TextMeshProUGUI m_searchBar;
 
         [System.NonSerialized] public string m_text = "";
+
+        #region Navigation
+
+        public void exitWebviewAndSwitchToHome()
+        {
+            DeleteAllGameObjectsInScene();
+            SceneManager.LoadScene("MainUI");
+        }
+
+        private void DeleteAllGameObjectsInScene()
+        {
+            var gameObjects = GameObject.FindGameObjectsWithTag("web");
+
+            for (int i = 0; i < gameObjects.Length; i++)
+            {
+                Destroy(gameObjects[i]);
+            }
+        }
+
+        #endregion Navigation
 
         #region KEY_EVENT
 

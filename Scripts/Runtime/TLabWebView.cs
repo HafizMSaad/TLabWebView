@@ -9,30 +9,11 @@ using UnityEngine.UI;
 
 namespace TLab.Android.WebView
 {
-	[System.Serializable]
-	public class JsEventCallback
-	{
-		[SerializeField] public string onPageFinish;
-		[SerializeField] public string onDownloadStart;
-		[SerializeField] public string onDownloadFinish;
-
-		[SerializeField] public string dl_uri_name = "unity_webview_dl_uri";
-		[SerializeField] public string dl_url_name = "unity_webview_dl_url";
-		[SerializeField] public string dl_id_name = "unity_webview_dl_id";
-	}
-
 	public class TLabWebView : MonoBehaviour
 	{
-		public enum DownloadOption
+		private enum DownloadOption
 		{
-			/// <summary>
-			/// https://developer.android.com/reference/android/app/DownloadManager.Request#setDestinationInExternalFilesDir(android.content.Context,%20java.lang.String,%20java.lang.String)
-			/// </summary>
 			applicationFolder,
-
-			/// <summary>
-			/// https://developer.android.com/reference/android/os/Environment#DIRECTORY_DOWNLOADS
-			/// </summary>
 			downloadFolder
 		}
 
@@ -41,7 +22,7 @@ namespace TLab.Android.WebView
 
 		[Header("File Download Settings")]
 		[SerializeField] private DownloadOption m_dlOption;
-		[SerializeField] private string m_subDir = "downloads";
+		[SerializeField] private string m_subdir = "downloads";
 
 		[Header("Resolution setting")]
 		[SerializeField] private int m_webWidth = 1024;
@@ -50,42 +31,29 @@ namespace TLab.Android.WebView
 		[SerializeField] private int m_texHeight = 512;
 
 		[Header("Javascript callback")]
-		[SerializeField] private JsEventCallback m_jsEventCallback = new JsEventCallback();
+		[SerializeField] private string m_onPageFinish;
 
 		public int WebWidth { get => m_webWidth; }
-
 		public int WebHeight { get => m_webHeight; }
-
 		public int TexWidth { get => m_texWidth; }
-
 		public int TexHeight { get => m_texHeight; }
-
-		public DownloadOption DlOption { get => m_dlOption; }
-
-		public string SubDir { get => m_subDir; }
-
-		public JsEventCallback jsEventCallback { get => m_jsEventCallback; }
-
-		public bool Visuble
+		public bool WebViewEnabled
 		{
-			get => m_enabled;
+			get => m_webViewEnable;
 			set
 			{
-				m_enabled = value && m_initialized;
+				m_webViewEnable = value && m_webViewInitialized;
 			}
 		}
 
-		public bool Destroyed { get => m_destroyed; }
-
-		private bool m_destroyed = false;
-		private bool m_enabled = false;
-		private bool m_initialized = false;
+		private bool m_webViewEnable = false;
+		private bool m_webViewInitialized = false;
 		private Texture2D m_webViewTexture;
-		private Coroutine m_webviewInitTask;
+		private Coroutine m_webvieStartTask;
 
 		private IntPtr m_texId = IntPtr.Zero;
 
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
+#if UNITY_ANDROID
 		private static AndroidJavaClass m_NativeClass;
 		private AndroidJavaObject m_NativePlugin;
 #endif
@@ -100,13 +68,7 @@ namespace TLab.Android.WebView
 		[AOT.MonoPInvokeCallback(typeof(RenderEventDelegate))]
 		private static void RunOnRenderThread(int eventID)
 		{
-#if !UNITYWEBVIEW_ANDROID_SUPPORT_OCULUS
-			/*
-			 * Perhaps Java Env is already attached to the render thread.
-			 */
-
 			AndroidJNI.AttachCurrentThread();
-#endif
 
 			IntPtr jniClass = AndroidJNI.FindClass("com/tlab/libwebview/UnityConnect");
 			if (jniClass == IntPtr.Zero || jniClass == null)
@@ -125,44 +87,22 @@ namespace TLab.Android.WebView
 
 			AndroidJNI.CallStaticVoidMethod(jniClass, jniFunc, m_jniArgs);
 
-#if !UNITYWEBVIEW_ANDROID_SUPPORT_OCULUS
 			AndroidJNI.DetachCurrentThread();
-#endif
 		}
 
-		public void Init()
+		public void Init(
+			int webWidth, int webHeight,
+			int tWidth, int tHeight,
+			int sWidth, int sHeight,
+			string url, int dlOption, string subDir, string onPageFinish)
 		{
-			if (m_webviewInitTask == null && !m_initialized)
+			string webViewURL = WebUtility.GenerateURL();
+#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
+			if (m_NativePlugin != null)
 			{
-				m_webviewInitTask = StartCoroutine(InitTask());
+				m_NativePlugin.Call("initialize", webWidth, webHeight, tWidth, tHeight, sWidth, sHeight, webViewURL, dlOption, subDir, onPageFinish);
 			}
-		}
-
-		public void Init(
-			int webWidth, int webHeight,
-			int texWidth, int texHeight)
-		{
-			m_webWidth = webWidth;
-			m_webHeight = webHeight;
-
-			m_texWidth = texWidth;
-			m_texHeight = texHeight;
-
-			Init();
-		}
-
-		public void Init(
-			int webWidth, int webHeight,
-			int texWidth, int texHeight,
-			string url, DownloadOption dlOption, string subDir)
-		{
-			m_url = url;
-
-			m_dlOption = dlOption;
-
-			m_subDir = subDir;
-
-			Init(webWidth, webHeight, texWidth, texHeight);
+#endif
 		}
 
 		public bool IsInitialized()
@@ -194,7 +134,7 @@ namespace TLab.Android.WebView
 		{
 			// If textures can be updated with a pointer, this will not be used.
 
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return new byte[0];
 			}
@@ -208,7 +148,7 @@ namespace TLab.Android.WebView
 
 		public IntPtr GetTexturePtr()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return IntPtr.Zero;
 			}
@@ -231,7 +171,7 @@ namespace TLab.Android.WebView
 
 		public void CaptureHTMLSource()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -243,7 +183,7 @@ namespace TLab.Android.WebView
 
 		public void CaptureElementById(string id)
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -255,7 +195,7 @@ namespace TLab.Android.WebView
 
 		public string CurrentHTMLCaptured()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return null;
 			}
@@ -269,7 +209,7 @@ namespace TLab.Android.WebView
 
 		public void CaptureUserAgent()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -281,7 +221,7 @@ namespace TLab.Android.WebView
 
 		public string GetUserAgent()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return "";
 			}
@@ -295,7 +235,7 @@ namespace TLab.Android.WebView
 
 		public void SetUserAgent(string ua, bool reload)
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -307,7 +247,7 @@ namespace TLab.Android.WebView
 
 		public void LoadUrl(string url)
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -319,7 +259,7 @@ namespace TLab.Android.WebView
 
 		public void LoadHTML(string html, string baseURL)
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -331,7 +271,7 @@ namespace TLab.Android.WebView
 
 		public void ZoomIn()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -343,7 +283,7 @@ namespace TLab.Android.WebView
 
 		public void ZoomOut()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -353,49 +293,21 @@ namespace TLab.Android.WebView
 #endif
 		}
 
-		public int GetScrollX()
+		public void RegisterOnPageFinishCallback(string js)
 		{
-			if (!m_enabled)
-			{
-				return 0;
-			}
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			return m_NativePlugin.Call<int>("getScrollX");
-#else
-			return 0;
-#endif
-		}
-
-		public int GetScrollY()
-		{
-			if (!m_enabled)
-			{
-				return 0;
-			}
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			return m_NativePlugin.Call<int>("getScrollY");
-#else
-			return 0;
-#endif
-		}
-
-		public void SetScroll(int x, int y)
-		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
 
 #if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call("setScroll", x, y);
+			m_NativePlugin.Call("registerOnPageFinishCallback", js);
 #endif
 		}
 
 		public void EvaluateJS(string js)
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -407,7 +319,7 @@ namespace TLab.Android.WebView
 
 		public void GoForward()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -419,7 +331,7 @@ namespace TLab.Android.WebView
 
 		public void GoBack()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -431,7 +343,7 @@ namespace TLab.Android.WebView
 
 		public void TouchEvent(int x, int y, int eventNum)
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -443,7 +355,7 @@ namespace TLab.Android.WebView
 
 		public void KeyEvent(char key)
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -455,7 +367,7 @@ namespace TLab.Android.WebView
 
 		public void BackSpace()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -467,7 +379,7 @@ namespace TLab.Android.WebView
 
 		public void SetVisible(bool visible)
 		{
-			Visuble = visible;
+			WebViewEnabled = visible;
 
 #if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
 			m_NativePlugin.Call("setVisible", visible);
@@ -492,83 +404,6 @@ namespace TLab.Android.WebView
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
 			m_NativePlugin.Call("clearHistory");
-#endif
-		}
-
-		public void SetOnPageFinish(string onPageFinish)
-		{
-			m_jsEventCallback.onPageFinish = onPageFinish;
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call("setOnPageFinish", m_jsEventCallback.onPageFinish);
-#endif
-		}
-
-		public void SetOnDownloadFinish(string onDownloadFinish)
-		{
-			m_jsEventCallback.onDownloadFinish = onDownloadFinish;
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call("setOnDownloadFinish", m_jsEventCallback.onDownloadFinish);
-#endif
-		}
-
-		public void SetOnDownloadStart(string onDownloadStart)
-		{
-			m_jsEventCallback.onDownloadStart = onDownloadStart;
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call("setOnDownloadStart", m_jsEventCallback.onDownloadStart);
-#endif
-		}
-
-		public void SetDlEventVariableName(
-			string dl_url_name, string dl_uri_name, string dl_id_name)
-		{
-			m_jsEventCallback.dl_url_name = dl_url_name;
-			m_jsEventCallback.dl_uri_name = dl_uri_name;
-			m_jsEventCallback.dl_id_name = dl_id_name;
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call(
-				"setDownloadEventVariableName",
-				m_jsEventCallback.dl_url_name,
-				m_jsEventCallback.dl_uri_name,
-				m_jsEventCallback.dl_id_name);
-#endif
-		}
-
-		public void SetDlOption(DownloadOption option)
-		{
-			m_dlOption = option;
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call("setDlOption", (int)m_dlOption);
-#endif
-		}
-
-		public void SetSubDir(string subdir)
-		{
-			m_subDir = subdir;
-
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call("setSubDir", m_subDir);
-#endif
-		}
-
-		public void RequestCaptureDownloadProgress()
-		{
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			m_NativePlugin.Call("requestCaptureDownloadProgress");
-#endif
-		}
-
-		public float GetDownloadProgress()
-		{
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			return m_NativePlugin.Call<float>("getDownloadProgress");
-#else
-			return 0.0f;
 #endif
 		}
 
@@ -597,8 +432,15 @@ namespace TLab.Android.WebView
 			}
 		}
 
-		private IEnumerator InitTask()
+		private IEnumerator StartWebViewTask()
 		{
+#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
+			if (m_NativeClass == null)
+			{
+				m_NativeClass = new AndroidJavaClass("com.tlab.libwebview.UnityConnect");
+			}
+#endif
+
 			yield return new WaitForEndOfFrame();
 
 #if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
@@ -624,25 +466,11 @@ namespace TLab.Android.WebView
 
 			m_rawImage.texture = m_webViewTexture;
 
-			if (m_NativePlugin != null)
-			{
-				SetDlOption(m_dlOption);
-				SetSubDir(m_subDir);
-
-				SetOnPageFinish(m_jsEventCallback.onPageFinish);
-				SetOnDownloadStart(m_jsEventCallback.onDownloadStart);
-				SetOnDownloadFinish(m_jsEventCallback.onDownloadFinish);
-
-				SetDlEventVariableName(
-					m_jsEventCallback.dl_url_name,
-					m_jsEventCallback.dl_uri_name,
-					m_jsEventCallback.dl_id_name);
-
-				m_NativePlugin.Call("initialize",
-					m_webWidth, m_webHeight,
-					m_texWidth, m_texHeight,
-					Screen.width, Screen.height, m_url);
-			}
+			Init(
+				m_webWidth, m_webHeight,
+				m_texWidth, m_texHeight,
+				Screen.width, Screen.height,
+				m_url, (int)m_dlOption, m_subdir, m_onPageFinish);
 
 			yield return new WaitForEndOfFrame();
 
@@ -653,16 +481,24 @@ namespace TLab.Android.WebView
 
 			yield return new WaitForEndOfFrame();
 
-			m_initialized = true;
-			m_enabled = true;
+			m_webViewInitialized = true;
+			m_webViewEnable = true;
 
-			m_webviewInitTask = null;
+			m_webvieStartTask = null;
 #endif
+		}
+
+		public void StartWebView()
+		{
+			if (m_webvieStartTask == null && !m_webViewInitialized)
+			{
+				m_webvieStartTask = StartCoroutine(StartWebViewTask());
+			}
 		}
 
 		public void UpdateFrame()
 		{
-			if (!m_enabled)
+			if (!m_webViewEnable)
 			{
 				return;
 			}
@@ -675,19 +511,9 @@ namespace TLab.Android.WebView
 			}
 		}
 
-		private void Awake()
+		public void Destroy()
 		{
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
-			if (m_NativeClass == null)
-			{
-				m_NativeClass = new AndroidJavaClass("com.tlab.libwebview.UnityConnect");
-			}
-#endif
-		}
-
-		private void Destroy()
-		{
-#if UNITY_ANDROID && !UNITY_EDITOR || DEBUG
+#if UNITY_ANDROID
 			if (m_NativePlugin == null)
 			{
 				return;
